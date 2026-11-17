@@ -1,0 +1,18 @@
+{$DOMAIN} {
+	encode gzip
+
+	# As metricas so saem com usuario e senha (o Prometheus do grupo conhece).
+	@metrics path /metrics
+	basic_auth @metrics {
+		{$METRICS_USER} {$METRICS_HASH}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy app:8000
+}

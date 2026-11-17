@@ -1,0 +1,41 @@
+# Stack da VM na nuvem: o app publicado pelo pipeline e o Caddy com HTTPS.
+# A VM baixa este arquivo e a imagem nova sozinha (ver infra/terraform/cloud-init.yaml).
+services:
+  app:
+    image: ghcr.io/jonzaka/gs-citizentech-app:latest
+    environment:
+      SEED_DEMO: "1"
+      BOT_API_KEY: ${BOT_API_KEY:-}
+    volumes:
+      - dados:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      METRICS_USER: ${METRICS_USER}
+      METRICS_HASH: ${METRICS_HASH}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  dados:
+  caddy_data:
+  caddy_config:

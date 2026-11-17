@@ -1,0 +1,6 @@
+# Copie para terraform.tfvars e preencha. O terraform.tfvars nunca vai para o repositorio.
+subscription_id   = "00000000-0000-0000-0000-000000000000"
+chave_ssh_publica = "~/.ssh/id_rsa.pub"
+ip_admin          = "203.0.113.10/32" # seu IP publico; descubra em https://ifconfig.me
+metrics_hash      = "$2a$14$..."      # docker run --rm caddy:2.10-alpine caddy hash-password --plaintext 'sua-senha'
+bot_api_key       = "gere-uma-chave-longa"

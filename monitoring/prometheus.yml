@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # App rodando no docker compose local.
+  - job_name: mvp-local
+    static_configs:
+      - targets: ["app:8000"]
+
+  # MVP publicado na nuvem. A senha fica em monitoring/secrets/metrics_password (fora do git).
+  - job_name: mvp-nuvem
+    scheme: https
+    metrics_path: /metrics
+    basic_auth:
+      username: prometheus
+      password_file: /etc/prometheus/secrets/metrics_password
+    static_configs:
+      - targets: ["cicloalerta.brazilsouth.cloudapp.azure.com"]

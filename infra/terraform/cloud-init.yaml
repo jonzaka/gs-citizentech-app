@@ -1,0 +1,61 @@
+#cloud-config
+# Roda uma vez, na criacao da VM: instala o Docker e liga o deploy automatico.
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - curl
+
+write_files:
+  # Configuracao do ambiente. So o root le.
+  - path: /opt/app/.env
+    permissions: "0600"
+    content: |
+      DOMAIN=${dominio}
+      METRICS_USER=${metrics_user}
+      METRICS_HASH='${metrics_hash}'
+      BOT_API_KEY=${bot_api_key}
+
+  # Baixa o compose do repositorio e a imagem nova, e sobe o que mudou.
+  - path: /opt/app/deploy.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      cd /opt/app
+      for arquivo in compose.prod.yaml Caddyfile; do
+        curl -fsSL -o "$arquivo.novo" "https://raw.githubusercontent.com/${repositorio}/main/$arquivo"
+        mv "$arquivo.novo" "$arquivo"
+      done
+      docker compose -f compose.prod.yaml pull --quiet
+      docker compose -f compose.prod.yaml up -d --remove-orphans
+      docker image prune -f > /dev/null
+
+  - path: /etc/systemd/system/deploy.service
+    content: |
+      [Unit]
+      Description=Deploy automatico do MVP
+      After=docker.service network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/app/deploy.sh
+
+  # A cada 2 minutos a VM confere se ha versao nova. O pipeline nao precisa de SSH.
+  - path: /etc/systemd/system/deploy.timer
+    content: |
+      [Unit]
+      Description=Confere versao nova do MVP a cada 2 minutos
+
+      [Timer]
+      OnBootSec=30s
+      OnUnitActiveSec=2min
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  - systemctl enable --now docker
+  - systemctl daemon-reload
+  - systemctl enable --now deploy.timer
