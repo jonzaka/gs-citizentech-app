@@ -1,0 +1,63 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: mvp-nuvem
+    folder: MVP
+    interval: 30s
+    rules:
+      # Dispara quando o Prometheus fica 1 minuto sem conseguir ler o MVP publicado.
+      - uid: mvp-fora-do-ar
+        title: MVP fora do ar
+        condition: C
+        for: 1m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severidade: critica
+        annotations:
+          summary: O MVP na nuvem nao responde ha mais de 1 minuto
+          description: Conferir o container do app na VM (docker compose ps) e o log do deploy.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 120, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: up{job="mvp-nuvem"}
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      # Dispara quando mais de 20% das respostas sao erro do servidor por 2 minutos.
+      - uid: mvp-taxa-de-erro
+        title: MVP com muitos erros 5xx
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severidade: alta
+        annotations:
+          summary: Mais de 20% das requisicoes do MVP terminam em erro 5xx
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: sum(rate(http_requests_total{job="mvp-nuvem",status="5xx"}[5m])) / sum(rate(http_requests_total{job="mvp-nuvem"}[5m]))
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.2] }

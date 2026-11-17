@@ -70,6 +70,18 @@ docker compose up --build
 3. A VM confere a cada 2 minutos se há imagem nova e atualiza sozinha. O pipeline não entra na VM, então a porta 22 não precisa abrir para a internet.
 4. O último passo do pipeline espera a URL pública responder com a versão do commit.
 
+## Observabilidade
+
+O Prometheus e o Grafana rodam na máquina do grupo (`docker compose up`) e leem as métricas do MVP publicado na nuvem.
+
+- **Dashboard** "MVP CicloAlerta - 4 métricas de ouro", em http://localhost:3000, pasta MVP: latência (p50, p95, p99), tráfego (requisições por segundo, por rota), erros (respostas 4xx e 5xx) e saturação (CPU e memória do app em relação ao limite).
+- **Alertas**, em `monitoring/grafana/provisioning/alerting/regras.yml`:
+  - *MVP fora do ar*: o Prometheus fica 1 minuto sem conseguir ler o MVP.
+  - *MVP com muitos erros 5xx*: mais de 20% das respostas são erro do servidor por 2 minutos.
+- O `/metrics` da nuvem pede usuário e senha. Para o Prometheus local ler, salve a senha em `monitoring/secrets/metrics_password` (pasta fora do git). Sem esse arquivo, o dashboard continua funcionando com o ambiente `mvp-local`.
+
+Tudo é criado por arquivo (dashboard, fonte de dados e regras), sem clicar na interface.
+
 ## Recriar a nuvem do zero
 
 Precisa do Terraform e do Azure CLI com `az login` feito.
