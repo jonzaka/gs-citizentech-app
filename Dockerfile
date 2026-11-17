@@ -13,6 +13,11 @@ ENV APP_VERSION=${GIT_SHA} \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
+# Aplica as correcoes de seguranca do sistema que a imagem base ainda nao trouxe.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --system --uid 10001 --no-create-home app \
     && mkdir /data \
     && chown app /data
