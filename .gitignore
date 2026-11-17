@@ -1,0 +1,20 @@
+# Terraform: state e variaveis nunca vao para o repositorio
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+crash.log
+
+# Segredos e configuracao local
+.env
+.env.*
+!.env.example
+monitoring/secrets/
+
+# Python e dados locais
+__pycache__/
+*.pyc
+.venv/
+data/
+*.db
