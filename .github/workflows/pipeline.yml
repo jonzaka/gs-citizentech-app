@@ -1,0 +1,97 @@
+name: pipeline
+
+# Roda a cada push, em qualquer branch. So a main publica e faz deploy.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGEM: ghcr.io/jonzaka/gs-citizentech-app
+  URL_MVP: https://cicloalerta.brazilsouth.cloudapp.azure.com
+
+jobs:
+  gitleaks:
+    name: Gitleaks (segredos)
+    runs-on: ubuntu-24.04
+    steps:
+      # Actions fixadas pelo SHA do commit, nao pela tag.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # historico inteiro: segredo antigo tambem barra
+      - name: Procurar segredos no historico do git
+        run: |
+          curl -fsSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose .
+
+  semgrep:
+    name: Semgrep (codigo inseguro)
+    runs-on: ubuntu-24.04
+    container: semgrep/semgrep:1.185.0
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Analisar o codigo
+        run: semgrep scan --config p/python --config p/dockerfile --config p/security-audit --error .
+
+  build:
+    name: Build e Trivy (vulnerabilidades)
+    runs-on: ubuntu-24.04
+    needs: [gitleaks, semgrep]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Construir a imagem
+        run: docker build --pull --build-arg GIT_SHA="$GITHUB_SHA" -t "$IMAGEM:$GITHUB_SHA" -t "$IMAGEM:latest" .
+
+      - name: Trivy barra falha alta ou critica que ja tem correcao
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            ghcr.io/aquasecurity/trivy:0.76.2 image \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$IMAGEM:$GITHUB_SHA"
+
+      - name: Testar se a imagem sobe e responde
+        run: |
+          docker run -d --name teste -p 8000:8000 --read-only --tmpfs /tmp "$IMAGEM:$GITHUB_SHA"
+          for i in $(seq 1 20); do curl -fsS http://localhost:8000/health && exit 0; sleep 2; done
+          docker logs teste; exit 1
+
+      - name: Enviar a imagem ao registro do GitHub
+        if: github.ref == 'refs/heads/main'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGEM:$GITHUB_SHA"
+          docker push "$IMAGEM:latest"
+
+  deploy:
+    name: Deploy na nuvem
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      # A VM busca a imagem nova sozinha, a cada 2 minutos (sem SSH aberto para o pipeline).
+      # Aqui o pipeline espera a URL publica responder com a versao deste commit.
+      - name: Esperar a versao nova no ar
+        run: |
+          for i in $(seq 1 40); do
+            versao=$(curl -fsS --max-time 10 "$URL_MVP/health" | jq -r .versao || true)
+            echo "tentativa $i: versao no ar = ${versao:-sem resposta}"
+            [ "$versao" = "$GITHUB_SHA" ] && exit 0
+            sleep 15
+          done
+          echo "A versao $GITHUB_SHA nao entrou no ar em 10 minutos"; exit 1
+
+      - name: Conferir as metricas (protegidas por senha)
+        env:
+          METRICS_PASSWORD: ${{ secrets.METRICS_PASSWORD }}
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$URL_MVP/metrics")" = "401"
+          curl -fsS -u "prometheus:$METRICS_PASSWORD" "$URL_MVP/metrics" | grep -q '^http_requests_total'
