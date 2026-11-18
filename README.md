@@ -4,7 +4,7 @@
 
 | Campo da ficha | Conteúdo |
 | --- | --- |
-| Nome do produto | CicloAlerta *(nome provisório)* |
+| Nome do produto | CicloAlerta |
 | Cidadão e território | Ciclistas e entregadores de bicicleta elétrica nas ciclovias da cidade de São Paulo |
 | Problema, em uma frase | Buracos e desníveis nas ciclovias causam quedas, e na chuva ficam escondidos pela água |
 | Proposta de valor | Saber antes de sair, e durante o trajeto, onde estão os trechos perigosos, com alerta mais forte em dia de chuva |
@@ -19,8 +19,11 @@
 
 | Nome completo | RM |
 | --- | --- |
+| Breno Silva | RM97864 |
+| Enrico Marquez | RM99325 |
+| Gustavo Dias | RM550820 |
 | Joel Barros | RM550378 |
-| *(preencher)* | |
+| Leonardo Moreira | RM550988 |
 
 ## Arquitetura
 
