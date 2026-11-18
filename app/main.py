@@ -202,8 +202,24 @@ def criar_alerta(alerta: AlertaEntrada, x_api_key: str = Header(default="")) -> 
 def indicadores() -> dict:
     """Le o CSV exportado da tabela Ouro. Enquanto ele nao existe, conta direto no banco."""
     if INDICADORES_CSV.exists():
-        with INDICADORES_CSV.open(encoding="utf-8", newline="") as arquivo:
-            return {"fonte": "tabela_ouro", "linhas": list(csv.DictReader(arquivo))}
+        with INDICADORES_CSV.open(encoding="utf-8-sig", newline="") as arquivo:
+            linhas = list(csv.DictReader(arquivo))
+
+        def soma(coluna: str) -> int:
+            return sum(int(float(linha.get(coluna) or 0)) for linha in linhas)
+
+        total = soma("total_perigos")
+        em_chuva = soma("perigos_em_chuva")
+        resumo = {
+            "perigos_mapeados": total,
+            "perigos_severidade_alta": soma("perigos_alta"),
+            "perigos_em_chuva": em_chuva,
+            "pct_em_chuva": round(100 * em_chuva / total, 1) if total else 0,
+            "alertas_ao_ciclista": soma("alertas_ciclista"),
+            "ciclovias_com_relato": len(linhas),
+            "atualizado_em": linhas[0].get("atualizado_em", "") if linhas else "",
+        }
+        return {"fonte": "tabela_ouro", "resumo": resumo, "linhas": linhas}
     with closing(db()) as conn:
         total = conn.execute("SELECT COUNT(*) FROM relatos").fetchone()[0]
         por_severidade = conn.execute(

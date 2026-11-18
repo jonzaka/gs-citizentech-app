@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Indicadores · CicloAlerta</title>
+  <style>
+    :root { --texto: #14213d; --suave: #5b6478; --borda: #d0d5dd; --destaque: #0b5fff; --alerta: #b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; color: var(--texto); background: #fff; }
+    header { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--borda); }
+    h1 { font-size: 1.1rem; margin: 0; }
+    a { color: var(--destaque); font-weight: 600; }
+    main { padding: 16px; max-width: 900px; margin: 0 auto; }
+    .cartoes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .cartao { border: 1px solid var(--borda); border-radius: 10px; padding: 12px; }
+    .cartao strong { display: block; font-size: 1.7rem; }
+    .cartao span { font-size: .85rem; color: var(--suave); }
+    h2 { font-size: 1rem; margin: 24px 0 8px; }
+    .rolagem { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+    td.num, th.num { text-align: right; }
+    td.alta { color: var(--alerta); font-weight: 600; }
+    #fonte { font-size: .8rem; color: var(--suave); margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Indicadores</h1>
+    <a href="/">Voltar ao mapa</a>
+  </header>
+  <main>
+    <section class="cartoes" id="cartoes" aria-live="polite"></section>
+
+    <h2>Ciclovias com mais perigos</h2>
+    <div class="rolagem">
+      <table>
+        <thead>
+          <tr>
+            <th>Ciclovia</th>
+            <th class="num">Perigos</th>
+            <th class="num">Graves</th>
+            <th class="num">Na chuva</th>
+            <th class="num">Alertas</th>
+            <th>Perigo mais comum</th>
+          </tr>
+        </thead>
+        <tbody id="linhas"></tbody>
+      </table>
+    </div>
+    <p id="fonte"></p>
+  </main>
+
+  <script>
+    const rotulos = {
+      perigos_mapeados: "perigos mapeados",
+      perigos_severidade_alta: "perigos graves",
+      perigos_em_chuva: "relatados com chuva",
+      pct_em_chuva: "dos relatos em hora de chuva",
+      alertas_ao_ciclista: "alertas ao ciclista",
+      ciclovias_com_relato: "ciclovias com relato"
+    };
+    const celula = (texto, classe) => {
+      const td = document.createElement("td");
+      td.textContent = texto;
+      if (classe) td.className = classe;
+      return td;
+    };
+
+    fetch("/api/indicadores").then(r => r.json()).then(dados => {
+      const cartoes = document.getElementById("cartoes");
+      const resumo = dados.resumo || Object.fromEntries(dados.linhas.map(l => [l.indicador, l.valor]));
+      for (const [chave, valor] of Object.entries(resumo)) {
+        if (chave === "atualizado_em") continue;
+        const div = document.createElement("div");
+        div.className = "cartao";
+        const numero = document.createElement("strong");
+        numero.textContent = chave.startsWith("pct_") ? `${String(valor).replace(".", ",")}%` : Number(valor).toLocaleString("pt-BR");
+        const legenda = document.createElement("span");
+        legenda.textContent = rotulos[chave] || chave.replaceAll("_", " ");
+        div.append(numero, legenda);
+        cartoes.append(div);
+      }
+
+      const corpo = document.getElementById("linhas");
+      if (dados.fonte === "tabela_ouro") {
+        const ciclovias = dados.linhas
+          .filter(l => l.ciclovia !== "Fora da rede cicloviária")
+          .sort((a, b) => b.total_perigos - a.total_perigos)
+          .slice(0, 15);
+        for (const l of ciclovias) {
+          const tr = document.createElement("tr");
+          tr.append(
+            celula(l.ciclovia),
+            celula(l.total_perigos, "num"),
+            celula(l.perigos_alta, "num" + (l.perigos_alta > 0 ? " alta" : "")),
+            celula(l.perigos_em_chuva, "num"),
+            celula(l.alertas_ciclista, "num"),
+            celula(l.tipo_mais_comum)
+          );
+          corpo.append(tr);
+        }
+        document.getElementById("fonte").textContent =
+          `Fonte: tabela Ouro do pipeline de dados (Airflow + Databricks). Atualizado em ${(resumo.atualizado_em || "").slice(0, 16)}. ` +
+          "Parte dos relatos é simulada e está documentada no repositório de dados.";
+      } else {
+        document.getElementById("fonte").textContent = "Fonte: banco do MVP (a tabela Ouro ainda não foi carregada).";
+      }
+    }).catch(() => {
+      document.getElementById("fonte").textContent = "Não foi possível carregar os indicadores agora.";
+    });
+  </script>
+</body>
+</html>
