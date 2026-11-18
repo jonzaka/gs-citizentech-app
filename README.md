@@ -22,6 +22,29 @@
 | Joel Barros | RM550378 |
 | *(preencher)* | |
 
+## Arquitetura
+
+```mermaid
+flowchart LR
+  dev[Equipe: git push] --> gha
+  subgraph GitHub
+    gha[GitHub Actions<br/>Gitleaks, Semgrep, build, Trivy] --> ghcr[(GHCR<br/>imagem do container)]
+  end
+  subgraph Azure[Azure · Brazil South]
+    nsg[Firewall NSG + IP público<br/>80 e 443 abertas, 22 só para o IP do grupo] --> caddy
+    subgraph VM[VM Ubuntu com Docker Compose]
+      caddy[Caddy: HTTPS] --> app[App: FastAPI + site]
+      app --> db[(SQLite em volume)]
+      timer[Timer de deploy<br/>a cada 2 min]
+    end
+  end
+  ciclista[Ciclista no celular] -- HTTPS --> nsg
+  timer -. puxa a imagem nova, sem SSH .-> ghcr
+  tf[Terraform] -. cria rede, firewall, IP e VM .-> Azure
+  mon[Prometheus + Grafana<br/>na máquina do grupo] -. lê /metrics com senha .-> caddy
+  app -. previsão de chuva .-> meteo[Open-Meteo]
+```
+
 ## O que há neste repositório
 
 Este é o repositório `app`: o site, a API e todo o caminho até a nuvem (disciplina Secure DevOps Tools & Cloud Computing).
@@ -60,7 +83,7 @@ docker compose up --build
 | `POST /api/perguntar` | Recebe uma pergunta e devolve `resposta`, `fonte` e `consta` *(em integração)* |
 | `GET /api/clima` | Diz se chove agora e na próxima hora (Open-Meteo) |
 | `GET` e `POST /api/alertas` | Alertas de trecho crítico; o `POST` pede o cabeçalho `X-API-Key` |
-| `GET /api/indicadores` | Indicadores da tabela Ouro |
+| `GET /api/indicadores` | Indicadores da tabela Ouro (`app/dados/indicadores.csv`), mostrados na tela `/indicadores.html` |
 | `GET /health` e `GET /metrics` | Saúde do serviço e métricas para o Prometheus |
 
 ## Como o código chega à nuvem
@@ -102,3 +125,21 @@ O Terraform cria o grupo de recursos, a rede, o firewall (portas 80 e 443 aberta
 - O site não tem login. O banco guarda só o ponto do perigo (latitude e longitude arredondadas, tipo, gravidade, origem e data). Não guardamos trajeto, IP nem identificação de quem reportou.
 - Os dados ficam em um volume da VM, na região Brazil South (São Paulo).
 - Os pontos de exemplo que aparecem no mapa estão marcados como `simulado`.
+
+## Responsabilidade compartilhada
+
+O MVP usa uma VM (infraestrutura como serviço). O Azure protege o datacenter, o hardware, a rede do provedor e a virtualização. O grupo protege do sistema operacional para cima: regras do firewall, acesso à VM (só chave SSH), imagem do container, código, segredos e os dados dos cidadãos.
+
+## Custo estimado
+
+Preços de tabela do Azure em Brazil South, consultados em 17/11/2026.
+
+| Recurso | US$ por mês |
+| --- | ---: |
+| VM Standard_D2s_v4 (2 vCPU, 8 GB), 730 h a US$ 0,153/h | 111,69 |
+| Disco SSD Standard E4 (32 GB) | 4,48 |
+| IP público estático | 3,65 |
+| Tráfego de saída (dentro dos 100 GB gratuitos), GitHub Actions e GHCR | 0,00 |
+| **Total** | **119,82** |
+
+Na Global Solution a VM fica ligada cerca de 10 dias, o que dá perto de US$ 39, pagos com crédito de estudante. A assinatura de estudante não libera a série B em Brazil South; com uma Standard_B2s o total cairia para cerca de US$ 57 por mês.
